@@ -10,6 +10,8 @@ from mcp.server.fastmcp import FastMCP
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
+os.environ.pop("PS1", None)
+
 mcp = FastMCP("Weather MCP Server")
 
 OPENWEATHER_API_KEY = os.getenv(

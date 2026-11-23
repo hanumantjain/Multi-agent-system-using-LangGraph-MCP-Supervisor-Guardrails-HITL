@@ -80,6 +80,7 @@ class TravelState(TypedDict, total=False):
     final_response: str
 
     llm_calls: int
+    revision_count: int
 
 # =====================
 # Shared helpers
@@ -800,6 +801,12 @@ def route_after_agent(current_agent: str):
 
     return route
 
+def route_after_human_approval(state: TravelState):
+    if state["approved"]:
+        return "approved"
+
+    return "revise"
+
 
 # =====================
 # Build Graph
@@ -832,7 +839,14 @@ graph.add_conditional_edges(
     "budget_agent", route_after_agent("budget_agent"), ROUTE_MAP
 )
 graph.add_edge("itinerary_agent", "human_approval")
-graph.add_edge("human_approval", "final_agent")
+graph.add_conditional_edges(
+    "human_approval",
+    route_after_human_approval,
+    {
+        "approved": "final_agent",
+        "revise": "itinerary_agent",
+    }
+)
 graph.add_edge("final_agent", END)
 graph.add_edge("guardrail_blocked", END)
 
