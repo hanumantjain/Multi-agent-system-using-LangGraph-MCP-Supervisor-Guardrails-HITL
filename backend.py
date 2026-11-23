@@ -344,10 +344,27 @@ def flight_agent(state: TravelState):
 # =====================
 
 def hotel_agent(state: TravelState):
-    query = (
-        f"Best hotels for "
-        f"{state['user_query']}"
-    )
+    constraints = state.get("trip_constraints", {})
+
+    query = f"""
+Find affordable hotels for this trip.
+
+Travel request: {state.get('user_query', '')}
+Destination: {constraints.get('destination', '')}
+Travel dates: Use dates from the user request.
+Travelers: Use the requested group size.
+Budget: {constraints.get('budget', '')}
+
+Find hotels with:
+- Official hotel or booking website
+- Location
+- Room prices
+- Availability for the requested dates, if published
+- Ratings and amenities
+
+Return source URLs and distinguish published prices
+from estimated prices.
+"""
 
     try:
         hotel_results = asyncio.run(
@@ -474,27 +491,152 @@ If exact live prices are unavailable, clearly label estimates as approximate.
 # Itinerary Agent
 # =====================
 
+
 def itinerary_agent(state: TravelState):
     prompt = f"""
-Create a complete travel itinerary.
+You are an expert international travel planner.
+Create a detailed, practical, day-by-day itinerary.
 
-User Query: {state['user_query']}
-Flight Results: {state['flight_results']}
-Hotel Results: {state['hotel_results']}
-Weather Results: {state['weather_results']}
+USER REQUEST:
+{state.get('user_query', '')}
 
-Make the itinerary practical, budget-aware, and easy to follow.
-Create a clear draft that is ready for human review.
+TRIP CONSTRAINTS:
+{state.get('trip_constraints', {})}
+
+FLIGHT INFORMATION:
+{state.get('flight_results', '')}
+
+HOTEL INFORMATION:
+{state.get('hotel_results', '')}
+
+WEATHER INFORMATION:
+{state.get('weather_results', '')}
+
+BUDGET ANALYSIS:
+{state.get('budget_results', '')}
+
+IMPORTANT RULES:
+1. Never invent flight prices, hotel prices, ratings, availability,
+   booking URLs, opening hours or attraction fees.
+2. Clearly distinguish live prices from estimated prices.
+3. Use actual URLs found in the supplied search results.
+4. If a price or URL is unavailable, explicitly say so.
+5. Keep the entire trip within the user's stated budget.
+6. Distinguish per-person, per-couple and group costs.
+7. Do not assume the number of travelers if it is unclear.
+8. Avoid unrealistic travel schedules and unnecessary backtracking.
+
+GENERATE THE FOLLOWING:
+
+## 1. Trip Overview
+- Destination
+- Origin
+- Travel dates
+- Number of travelers
+- Duration
+- Travel style
+- Budget and currency
+
+## 2. Flight Details
+- Departure and arrival airports
+- Airline and flight number, if available
+- Departure and arrival times, if available
+- Duration and stops
+- Price per person and total
+- Booking URL
+- Clearly label estimates where live fares are unavailable.
+
+## 3. Hotel Recommendations
+Recommend at least 3 suitable hotels.
+
+For each hotel provide:
+- Hotel name
+- Location and neighborhood
+- Room type
+- Amenities
+- Rating, if verified
+- Price per night
+- Total stay cost
+- Booking URL
+- Why it is suitable
+
+## 4. Detailed Day-by-Day Itinerary
+
+For EVERY day include:
+
+### Morning
+- Suggested time
+- Activity and location
+- Description
+- Entrance fee
+
+### Afternoon
+- Suggested time
+- Activity and location
+- Description
+- Transport method and estimated cost
+
+### Evening
+- Suggested time
+- Activity and location
+- Local food recommendations
+- Estimated meal cost
+
+Also include:
+- Estimated travel time between activities
+- Daily activity and transport budget
+- Useful local tips
+
+## 5. Transportation
+- Airport transfers
+- Local transportation
+- Intercity transportation
+- Estimated costs and booking links where available
+
+## 6. Food Recommendations
+- Local dishes
+- Suggested restaurants or food markets
+- Estimated meal costs
+- Locations and links where available
+
+## 7. Complete Budget Breakdown
+
+Provide a table with:
+- Flights
+- Hotels
+- Food
+- Local transport
+- Intercity transport
+- Attractions
+- Miscellaneous
+- Emergency buffer
+
+Show:
+- Cost per person
+- Cost per couple
+- Total group cost
+
+## 8. Booking Checklist
+List what should be booked in advance and include available links.
+
+## 9. Important Travel Information
+Mention weather, visa requirements to verify, local currency,
+safety considerations and practical travel tips.
+
+Make this a genuinely useful travel plan, not a short destination overview.
+Use INR for costs when the traveler is departing from India.
 """
-
+    
     response = llm.invoke([
-        SystemMessage(content="You are a travel planner."),
+        SystemMessage(
+            content="You are a meticulous professional travel itinerary planner."
+        ),
         HumanMessage(content=prompt)
     ])
 
     approval_request = (
-        "Please review the generated draft itinerary. Approve it to create the"
-        "Final polished plan or provide feedback for revision"
+        "Please review the detailed itinerary, hotel recommendations, "
+        "flight information and budget before approving."
     )
 
     return {
@@ -503,6 +645,8 @@ Create a clear draft that is ready for human review.
         "messages": [response],
         "llm_calls": state.get("llm_calls", 0) + 1
     }
+
+
 # =====================
 # Human in the loop approval
 # =====================
@@ -544,49 +688,66 @@ The user requested a revision. Apply this feedback carefully:
 {state.get("human_feedback", "") or "Improve the draft before finalizing it."}
 """
 
-    final_prompt = f"""
-Generate ta final travel response for the user.
-Human Review:
-{review_instruction}
 
-User Request:
-{state['user_query']}
+    final_prompt = """
+You are TripMate AI's professional travel planning assistant.
 
-Supervisor Constraints:
+Prepare the final detailed travel plan using the information below.
+
+USER REQUEST:
+{state.get('user_query', '')}
+
+TRIP CONSTRAINTS:
 {state.get('trip_constraints', {})}
 
-Flights:
+FLIGHTS:
 {state.get('flight_results', '')}
 
-Hotels:
+HOTELS:
 {state.get('hotel_results', '')}
 
-Weather:
+WEATHER:
 {state.get('weather_results', '')}
 
-Budget Analysis:
+BUDGET:
 {state.get('budget_results', '')}
 
-Draft Itinerary:
+DETAILED ITINERARY:
 {state.get('itinerary', '')}
 
-Format the final answer beautifully using these sections:
+HUMAN REVIEW:
+{review_instruction}
+
+REQUIREMENTS:
+
+- Preserve the detailed day-by-day schedule.
+- Do not shorten the hotel recommendations.
+- Preserve hotel and booking URLs as clickable Markdown links.
+- Include all available prices and clearly label estimates.
+- Show costs per person, per couple and for the whole group.
+- Include transport, food, attraction and accommodation expenses.
+- Clearly identify missing live data.
+- Do not invent booking links, prices or availability.
+- Check that the budget totals are mathematically consistent.
+- Do not change the user's travel dates or group size.
+
+Use these sections:
 
 1. Trip Summary
-2. Flight Information
-3. Hotel Suggestions
+2. Flight Options and Booking Links
+3. Hotel Recommendations and Booking Links
 4. Weather Information
-5. Day-by-Day Itinerary
-6. Estimated Budget
-7. Final Recommendations
+5. Detailed Day-by-Day Itinerary
+6. Local Food and Restaurant Recommendations
+7. Transportation and Transfer Costs
+8. Detailed Budget Breakdown
+9. Booking Checklist
+10. Important Travel Advice
 
-Important:
-- Be clear and practical.
-- Mention that live flight API may not provide ticket prices if pricing is unavialable.
-- Include weather-based travel advise
-- Keep the response useful for real travel planning.
--Incorporate the human feedback when revision was requested.
+Make the final response comprehensive and practical.
+Do not turn this into a short summary.
 """
+
 
     response = llm.invoke([
         SystemMessage(content="You are professional AI travel booking assistant"),
