@@ -3,11 +3,11 @@ let latestAnswerMarkdown = "";
 let waitingForApproval = false;
 
 const AGENT_LABELS = {
-  flight_agent: "✈️ Flight Agent",
-  hotel_agent: "🏨 Hotel Agent",
-  weather_agent: "🌦️ Weather Agent",
-  budget_agent: "💰 Budget Agent",
-  itinerary_agent: "🗓️ Itinerary Agent"
+  flight_agent: "Flight information",
+  hotel_agent: "Places to stay",
+  weather_agent: "Weather forecast",
+  budget_agent: "Budget guidance",
+  itinerary_agent: "Day-by-day itinerary"
 };
 
 function setPrompt(text) {
@@ -59,8 +59,12 @@ function showWorkflow(data) {
   const section = document.getElementById("workflowSection");
   const reasoning = document.getElementById("supervisorReasoning");
   const chips = document.getElementById("agentChips");
-  const guardrailBadge = document.getElementById("guardrailBadge");
+  const heading = document.getElementById("workflowTitle");
+  const requestBlocked = data.guardrail_allowed === false;
 
+  heading.textContent = requestBlocked
+    ? "A note about your request"
+    : "What we’ll look into";
   reasoning.textContent = data.supervisor_reasoning || "Supervisor routing completed.";
   chips.innerHTML = "";
 
@@ -71,28 +75,24 @@ function showWorkflow(data) {
     chips.appendChild(chip);
   });
 
-  if (data.guardrail_allowed === false) {
-    guardrailBadge.textContent = "Guardrail blocked";
-    guardrailBadge.classList.add("blocked");
-  } else {
-    guardrailBadge.textContent = "Guardrail passed";
-    guardrailBadge.classList.remove("blocked");
-  }
-
   section.classList.remove("hidden");
 }
 
-function showResult(answer, threadId, isDraft = false) {
+function showResult(answer, threadId, isDraft = false, requestAllowed = true) {
   latestAnswerMarkdown = answer || "";
 
   const resultSection = document.getElementById("resultSection");
   const resultBox = document.getElementById("resultBox");
   const threadInfo = document.getElementById("threadInfo");
   const resultTitle = document.getElementById("resultTitle");
+  const resultStatus = document.getElementById("resultStatus");
 
   renderMarkdown(resultBox, latestAnswerMarkdown);
   threadInfo.textContent = `Thread ID: ${threadId}`;
-  resultTitle.textContent = isDraft ? "Draft Travel Plan" : "Your Final AI Travel Plan";
+  resultTitle.textContent = isDraft ? "Your trip draft" : "Your itinerary";
+  resultStatus.textContent = requestAllowed
+    ? (isDraft ? "Ready for review" : "Plan complete")
+    : "Travel request needed";
   resultSection.classList.remove("hidden");
 
   resultSection.scrollIntoView({
@@ -162,7 +162,7 @@ async function sendMessage() {
       showApproval(data);
     } else {
       hideApproval();
-      showResult(data.answer, data.thread_id, false);
+      showResult(data.answer, data.thread_id, false, data.guardrail_allowed !== false);
     }
   } catch (error) {
     showError(error.message);
@@ -257,7 +257,7 @@ function downloadPDF() {
 
   const options = {
     margin: 0.5,
-    filename: "ai-travel-plan.pdf",
+    filename: "tripmate-itinerary.pdf",
     image: {
       type: "jpeg",
       quality: 0.98

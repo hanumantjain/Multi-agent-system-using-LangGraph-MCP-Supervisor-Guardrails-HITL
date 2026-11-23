@@ -41,25 +41,7 @@ OPENAI_API_KEY = (
     or os.getenv("OPEN_AI_API_KEY")
 )
 
-# Support your original weather server filename and location.
-WEATHER_SERVER_CANDIDATES = [
-    BASE_DIR / "custom_weather_mcp.py",
-    BASE_DIR / "custom_weather_mcp_server.py",
-    Path(
-        "/Users/hanumant/Dev/TripPlanner/"
-        "Multi-agent-system-using-LangGraph-MCP-Supervisor-Guardrails-HITL/"
-        "custom_weather_mcp.py"
-    ),
-]
-
-WEATHER_SERVER_PATH = next(
-    (
-        path
-        for path in WEATHER_SERVER_CANDIDATES
-        if path.is_file()
-    ),
-    WEATHER_SERVER_CANDIDATES[0],
-)
+WEATHER_SERVER_PATH = BASE_DIR / "custom_weather_mcp.py"
 
 UVX_COMMAND = shutil.which("uvx") or "uvx"
 
